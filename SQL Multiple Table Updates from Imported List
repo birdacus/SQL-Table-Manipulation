@@ -1,0 +1,195 @@
+package info.container;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Scanner;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+class infoContainers{
+    
+    String info;
+    String container;
+    int infoId;
+    int containerId;
+    
+    public infoContainers(String info,String container){
+        this.info = info;
+        this.container = container;
+        
+    }
+}
+
+class IdContainer{
+    
+    int containerId;
+    String containerName;
+    int infoId;
+    String infoName;
+    
+    public IdContainer(int containerId,String containerName){
+        this.containerId = containerId;
+        this.containerName = containerName;
+    }
+}
+
+class ifnoIdContainer{
+    
+    int infoIds;
+    String esnName;
+    
+    public infoIdContainer(int infoIds,String infoName){
+        this.infoIds = infoIds;
+        this.infoName = infoName;
+    }
+}
+        
+        
+public class InfoContainer {
+
+    public static void main(String[] args){
+        
+        try {
+            
+            String db ="jdbc:mysql://"+"check comments for what goes here"; //db add address and port to end of string (ex. 11.111.11.111:3303/your-database
+            String username="username"; //your username to connect to database
+            String password="password"; //your password to connect to database
+            
+            ArrayList<infoContainers> list = new ArrayList<infoContainers>();//array list for the imported file containing esn&container info
+            ArrayList<String> uniqueContainer = new ArrayList<String>();// array list for the unique containers
+            
+            try {
+                Scanner scanner = new Scanner(new File("list.txt"));//gets the list of the ESN & Container info
+                while(scanner.hasNextLine()){
+                    String e = scanner.nextLine();
+                    String[] tokens = e.split(",");
+                    list.add(new infoContainers(tokens[0], tokens[1]));
+                }
+                
+                
+                
+                uniqueContainer.add(list.get(0).container);//add initial unique container id
+                if(list.size()>1){
+                for (int i=1;i<list.size();i++){//loop through each container name
+                    int count = 0;
+                    String k = list.get(i).container;
+                    for(int j=0;j<uniqueContainer.size();j++){
+                        if(k.compareTo(uniqueContainer.get(j))==0){//if container matches what is already in the list add 1 to the counter
+                            count++;
+                        }
+                    }
+                    if(count<1){//if the counter is 0 then the container is unique and needs to be added to the list
+                        uniqueContainer.add(k);
+                    }
+                }
+                }
+            } catch (FileNotFoundException ex) {
+                Logger.getLogger(infoContainer.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            
+            Class.forName("com.mysql.jdbc.Driver").newInstance();
+            
+            Connection con = DriverManager.getConnection(db, username, password);
+            
+            Statement st = con.createStatement(); //statement
+            ResultSet rs; //results
+            
+            DateFormat df = new SimpleDateFormat("yyy/MM/dd");
+            java.util.Date date = new java.util.Date();
+            
+            String addContainer = "('"+uniqueContainer.get(0)+"','"+df.format(date)+"',1)"; //set the initial unique container to add
+            if(uniqueContainer.size()>1){
+            for (int i=1;i<uniqueContainer.size();i++){// loop to create string to add to the query for unique container update
+                addContainer = addContainer+",('"+uniqueContainer.get(i)+"','"+df.format(date)+"',1)";
+            }
+            }
+            String query = "INSERT INTO container_details (container_name,date,modified_by)"+addContainer; + //query to add unique container names to sql table
+
+            st.executeUpdate(query);
+            
+            String results = "container_name = '"+uniqueContainer.get(0)+"'";//set initial container name to be included in the Where clause in SQL
+            if(uniqueContainer.size()>1){
+                for(int i=1;i<uniqueContainer.size();i++){// loop to create string to add to the query for unique container Where clause
+                    results = results + " or container_name = '"+uniqueContainer.get(i)+"'";
+                }
+            }
+            ArrayList<IdContainer> containerId = new ArrayList<IdContainer>(); //ArrayList to get the ID and container name of unique containers
+            query = "Select id, container_name\n"+
+                    "From sql_table\n"+
+                    "Where "+results;
+            rs = st.executeQuery(query);
+            
+            while(rs.next()){
+                int x = rs.getInt(1);
+                String y = rs.getString(2);
+                containerId.add(new IdContainer(x,y)); //add result set to ArrayLisdt "id" for the id and container name associated with the id
+            }
+            
+            String infoResult = "unit_number = '"+list.get(0).info+"'";//set initial info name to be included in the Where clause in SQL
+            if(list.size()>1){
+                for(int i=1;i<list.size();i++){
+                    infoResult = infoResult+" or unit_number = '"+list.get(i).info+"'";
+                }
+            }
+            System.out.println(infoResult);
+            ArrayList<infoIdContainer> infoId = new ArrayList<infoIdContainer>();
+            query = "Select id,unit_number\n"+ //Query to get the id of the ESN's from the original list
+                    "From inventory_details\n"+
+                    "Where "+infoResult;
+            rs = st.executeQuery(query);
+            
+            while(rs.next()){//while loop to add container id and names to new ArrayList esnId
+                int x = rs.getInt(1);
+                String y = rs.getString(2);
+                infoId.add(new infoIdContainer(x,y));
+            }
+            
+            for(int i=0;i<list.size();i++){//loops to get container id inserted into the "List" ArrayList.
+                for(int j=0;j<containerId.size();j++){
+                    if(containerId.get(j).containerName.compareTo(list.get(i).container)==0){//if container name matches what is on the list add the id that corresponds to "list"
+                        list.get(i).containerId = containerId.get(j).containerId;
+                }
+            }
+            }          
+            
+            for(int k = 0;k<list.size();k++){//loops to get info id inserted into the "List" ArrayList.
+                for(int m = 0;m<infoId.size();m++){
+                    if(infoId.get(m).infoName.compareTo(list.get(k).info)==0){//if esn name matches what is on the list add the id that corresponds to "list"
+                        list.get(k).infoId = infoId.get(m).infoIds;
+                        break;
+                }
+            }
+            }
+            System.out.println(list.size());
+            System.out.println(infoId.size());
+            for(int i=0;i<list.size();i++){
+                System.out.println("info:"+list.get(i).info+"\ninfoID: "+list.get(i).infoId+"\nContainer: "+list.get(i).container+"\nContainerId: "+list.get(i).containerId);}
+            
+            
+            String addContents = "("+list.get(0).containerId+","+list.get(0).infoId+")";//set up addContents for query to update "inventory_container_details" 
+            if(list.size()>1){
+            for(int i = 1;i<list.size();i++){
+                addContents = addContents + ",("+list.get(i).containerId+","+list.get(i).infoId+")";  
+            }
+            }
+            
+            query ="INSERT INTO inventory_container_contents (container_id,unit_id)\n" + //query to add container id and esn id to sql table
+"VALUES "+addContents;
+            st.executeUpdate(query);
+            
+            con.close();
+                    
+        } catch (ClassNotFoundException | IllegalAccessException | InstantiationException | SQLException ex) {
+            Logger.getLogger(InfoContainer.class.getName()).log(Level.SEVERE, null, ex);
+        }
+   
+    }
+}
